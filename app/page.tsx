@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-import Papa from "papaparse"
+import { supabase } from "../lib/supabaseClient"
 
 interface LogEntry {
+  id: number
   date: string
   title: string
   url: string
@@ -17,18 +18,39 @@ interface LogEntry {
 export default function LearningLogPage() {
   const [entries, setEntries] = useState<LogEntry[]>([])
 
-  // CSV読み込み（public/data.csv）
+  // Supabase からデータ取得
   useEffect(() => {
-    fetch("/data.csv")
-      .then((res) => res.text())
-      .then((csvText) => {
-        const results = Papa.parse(csvText, { header: true, skipEmptyLines: true })
-        setEntries(results.data as LogEntry[])
-      })
+    const fetchEntries = async () => {
+      const { data, error } = await supabase.from("learning_logs").select("*")
+      if (error) {
+        console.error("Supabase fetch error:", error)
+      } else {
+        // デフォルト値を補完
+        const safeData = (data || []).map((entry: any) => ({
+          id: entry.id,
+          date: entry.date || "",
+          title: entry.title || "(タイトル未設定)",
+          url: entry.url || "#",
+          source: entry.source || "(不明)",
+          ai_point: entry.ai_point || "",
+          memo: entry.memo || "",
+          status: entry.status || "keep",
+          tag: entry.tag || "未分類",
+        }))
+        setEntries(safeData)
+        console.log("Supabase fetch data:", safeData)
+      }
+    }
+    fetchEntries()
   }, [])
 
   // status=keep の行のみ
-  const keepEntries = useMemo(() => entries.filter((entry) => entry.status === "keep"), [entries])
+  const keepEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      const status = entry.status ?? "keep"
+      return status === "keep"
+    })
+  }, [entries])
 
   // タグ集計
   const tagStats = useMemo(() => {
@@ -46,20 +68,20 @@ export default function LearningLogPage() {
   }, [keepEntries])
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-gray-50 p-6 text-gray-900">
       <div className="mx-auto max-w-4xl">
-        <h1 className="mb-8 text-2xl font-bold text-foreground">学習ログ</h1>
+        <h1 className="mb-8 text-2xl font-bold">学習ログ</h1>
 
         {/* 学習バランス */}
         <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">学習バランス</h2>
-          <div className="rounded-lg border border-border bg-card p-6">
+          <h2 className="mb-4 text-lg font-semibold">学習バランス</h2>
+          <div className="rounded-lg border border-gray-300 bg-white p-6">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">全 {keepEntries.length} 件</p>
+              <p className="text-sm text-gray-600">全 {keepEntries.length} 件</p>
               {tagStats.map(({ tag, count, percentage }) => (
                 <div key={tag} className="flex items-baseline gap-3">
-                  <span className="font-medium text-foreground">{tag}</span>
-                  <span className="text-sm text-muted-foreground">
+                  <span className="font-medium">{tag}</span>
+                  <span className="text-sm text-gray-600">
                     {count}件 ({percentage}%)
                   </span>
                 </div>
@@ -70,26 +92,26 @@ export default function LearningLogPage() {
 
         {/* 記事一覧 */}
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Keep記事一覧</h2>
+          <h2 className="mb-4 text-lg font-semibold">Keep記事一覧</h2>
           <div className="space-y-4">
-            {keepEntries.map((entry, index) => (
-              <article key={index} className="rounded-lg border border-border bg-card p-6">
-                <h3 className="mb-2 text-base font-semibold leading-relaxed text-foreground">{entry.title}</h3>
+            {keepEntries.map((entry) => (
+              <article key={entry.id} className="rounded-lg border border-gray-300 bg-white p-6">
+                <h3 className="mb-2 text-base font-semibold leading-relaxed">{entry.title}</h3>
 
-                <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="rounded bg-muted px-2 py-1 font-medium">{entry.tag}</span>
+                <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                  <span className="rounded bg-gray-200 px-2 py-1 font-medium">{entry.tag}</span>
                   <span>{entry.source}</span>
                   <a
                     href={entry.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline hover:text-foreground"
+                    className="underline hover:text-gray-900"
                   >
                     リンク
                   </a>
                 </div>
 
-                {entry.memo && <p className="text-sm leading-relaxed text-muted-foreground">{entry.memo}</p>}
+                {entry.memo && <p className="text-sm leading-relaxed text-gray-700">{entry.memo}</p>}
               </article>
             ))}
           </div>
